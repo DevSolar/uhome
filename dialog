@@ -33,7 +33,7 @@ _mbprintf()
 
 	if [[ ${1} == *#* ]]
 	then
-		local input=$(printf "${input}%.0s" $(seq 1 $width))
+		local input=$(printf -- "${input}%.0s" $(seq 1 $width))
 	else
 		local input=${input:0:${prec:-${#input}}}
 		local pad=$(( ${width} > ${#input} ? ${width} - ${#input} : 0 ))
@@ -90,34 +90,36 @@ _yesno()
 {
 	clear
 
-	x=$((($cols - $width) / 2))
-	y=$((($rows - $height) / 2))
-	box=$(mbprintf '%#*s' $(($width - 2)) '─')
+	box=$(mbprintf '%#*s' $(($width - 2)) $hl)
 	ind=$(mbprintf '%#*s' $x ' ')
 
 	if [[ $backtitle ]]
 	then
 		mbprintf " %s\n" "$backtitle"
-		mbprintf " %#*s\n" $((cols - 2)) "─"
+		mbprintf " %#*s\n" $((cols - 2)) $hl
 	fi
+
+	line="$ind$ul$box$ur"
+	tput cup $y
 
 	if [[ $title ]]
 	then
-		line="$ind┌$box┐"
 		truncated=$(printf '%.*s' $width "$title")
 		trunc_x=$(( ( width - ${#truncated} ) / 2 + x ))
-		tput cup $y
 		mbprintf "%.*s%s%s\n" $trunc_x "$line" "$truncated" "${line:$((trunc_x + ${#truncated}))}"
+	else
+		echo "$line"
 	fi
+
 
 	if [[ ${#fmt_text[@]} -gt 0 ]]
 	then
 		for ((i = 0; i < (height - 2); ++i))
 		do
-			mbprintf "%s│ %-*s │\n" "$ind" $((width - 4)) "${fmt_text[$i]}"
+			mbprintf "%s$vl %-*s $vl\n" "$ind" $((width - 4)) "${fmt_text[$i]}"
 		done
 
-		mbprintf "%s└%s┘\n" "$ind" "$box"
+		mbprintf "%s$bl%s$br\n" "$ind" "$box"
 	fi
 
 	while true
@@ -135,6 +137,14 @@ _yesno()
 
 title=''
 backtitle=''
+
+ul='┌'
+ur='┐'
+hl='─'
+vl='│'
+bl='└'
+br='┘'
+
 cols=$(tput cols)
 rows=$(tput lines)
 
@@ -149,6 +159,20 @@ do
 			backtitle=$2
 			shift 2
 			;;
+		'--ascii-lines' )
+			ul='+'
+			ur='+'
+			hl='-'
+			vl='|'
+			bl='+'
+			br='+'
+			shift
+			;;
+		'--begin' )
+			y=$2
+			x=$3
+			shift 3
+			;;
 		* )
 			break
 			;;
@@ -160,6 +184,8 @@ case $1 in
 		width=$(( $4 > 30 ? $4 : 30 ))
 		readarray -t fmt_text < <(fold -s -w $((width - 4)) - <<< $2)
 		height=$(( height >= ${#fmt_text[@]} + 2 ? height : ${#fmt_text[@]} + 2 ))
+		x=${x:-$((($cols - $width) / 2))}
+		y=${y:-$((($rows - $height) / 2))}
 		_${1##--}
 		;;
 esac
