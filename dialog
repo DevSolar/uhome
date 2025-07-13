@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+
+command -vp dialog >/dev/null 2>&1
+
+if [[ $? == 1 ]]
+then
+	dialog $@
+	exit $?
+fi
+
+_mbprintf()
+{
+	# _mbprintf flags width prec input
+	local width=$2
+	local prec=$3
+	local input=$4
+
+	if [[ $width == '*' ]]
+	then
+		width=$input
+		input=$5
+
+		if [[ $prec == '*' ]]
+		then
+			prec=$input
+			input=$6
+		fi
+	elif [[ $prec == '*' ]]
+	then
+		prec=$input
+		input=$5
+	fi
+
+	if [[ ${1} == *#* ]]
+	then
+		local input=$(printf "${input}%.0s" $(seq 1 $width))
+	else
+		local input=${input:0:${prec:-${#input}}}
+		local pad=$(( ${width} > ${#input} ? ${width} - ${#input} : 0 ))
+	fi
+
+	if [[ $pad -gt 0 ]]
+	then
+		if [[ ${1} == *-* ]]
+		then
+			echo -n "$input$(printf " %.0s" $(seq 1 $pad))"
+		else
+			echo -n "$(printf " %.0s" $(seq 1 $pad))$input"
+		fi
+	else
+		echo -n "$input"
+
+	fi
+}
+
+mbprintf()
+{
+	# To be called just like the builtin printf
+	if [[ $1 =~ ^(%([-+0 #]+)?([0-9]+|\*)?(\.)?([0-9]+|\*)?([aAcdeEfFgGiopsuxX%]))(.*)? ]]
+	then
+		local rest=${BASH_REMATCH[7]}
+
+		case ${BASH_REMATCH[6]} in
+			s )
+				shift
+				_mbprintf "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]:-0}" "${BASH_REMATCH[5]}" "$@"
+				;;
+			* )
+				shift
+				printf "${BASH_REMATCH[1]}" "$@"
+				;;
+		esac
+
+		[[ ${BASH_REMATCH[3]} == '*' ]] && shift
+		[[ ${BASH_REMATCH[5]} == '*' ]] && shift
+	elif [[ $1 =~ ^([^%]+)(%.*)? ]]
+	then
+		echo -ne "${BASH_REMATCH[1]}"
+		local rest="${BASH_REMATCH[2]}"
+	fi
+
+	if [[ -n $rest ]]
+	then
+		shift
+		mbprintf "$rest" "$@"
+	fi
+}
+
+_yesno()
+{
+	clear
+
+	x=$((($cols - $width) / 2))
+	y=$((($rows - $height) / 2))
+	box=$(mbprintf '%#*s' $(($width - 2)) '─')
+	ind=$(mbprintf '%#*s' $x ' ')
+
+	if [[ $backtitle ]]
+	then
+		mbprintf " %s\n" "$backtitle"
+		mbprintf " %#*s\n" $((cols - 2)) "─"
+	fi
+
+	if [[ $title ]]
+	then
+		line="$ind┌$box┐"
+		truncated=$(printf '%.*s' $width "$title")
+		trunc_x=$(( ( width - ${#truncated} ) / 2 + x ))
+		tput cup $y
+		mbprintf "%.*s%s%s\n" $trunc_x "$line" "$truncated" "${line:$((trunc_x + ${#truncated}))}"
+	fi
+
+	if [[ ${#fmt_text[@]} -gt 0 ]]
+	then
+		for ((i = 0; i < (height - 2); ++i))
+		do
+			mbprintf "%s│ %-*s │\n" "$ind" $((width - 4)) "${fmt_text[$i]}"
+		done
+
+		mbprintf "%s└%s┘\n" "$ind" "$box"
+	fi
+
+	while true
+	do
+		tput cup $(($rows - 1)) 1
+		read -s -n 1 -p "Yes, or no? (y/n) " yn
+
+		case $yn in
+			[yY] ) exit 0 ;;
+			[nN] ) exit 1 ;;
+			* ) ;;
+		esac
+	done
+}
+
+title=''
+backtitle=''
+cols=$(tput cols)
+rows=$(tput lines)
+
+while [[ $# -gt 0 ]]
+do
+	case "$1" in
+		'--title' )
+			title=$2
+			shift 2
+			;;
+		'--backtitle' )
+			backtitle=$2
+			shift 2
+			;;
+		* )
+			break
+			;;
+	esac
+done
+
+case $1 in
+	* )
+		width=$(( $4 > 30 ? $4 : 30 ))
+		readarray -t fmt_text < <(fold -s -w $((width - 4)) - <<< $2)
+		height=$(( height >= ${#fmt_text[@]} + 2 ? height : ${#fmt_text[@]} + 2 ))
+		_${1##--}
+		;;
+esac
+
