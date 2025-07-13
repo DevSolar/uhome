@@ -8,6 +8,24 @@ then
 	exit $?
 fi
 
+
+_readkey()
+{
+	# $'\t' -> tab
+	# ''    -> enter
+	# ' '   -> space
+	# '[A'  -> up
+	# '[B'  -> down
+	# '[C'  -> right
+	# '[D'  -> left
+	local esc=$(printf "\u1b")
+	IFS= read -rsn1 _readkey
+	if [[ $_readkey == $esc ]]
+	then
+		read -rsn2 _readkey
+	fi
+}
+
 _mbprintf()
 {
 	# _mbprintf flags width prec input
