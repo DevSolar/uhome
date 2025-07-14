@@ -2,7 +2,7 @@
 
 command -vp dialog >/dev/null 2>&1
 
-if [[ $? == 1 ]]
+if [[ $? == 0 ]]
 then
 	dialog $@
 	exit $?
