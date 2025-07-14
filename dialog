@@ -2,17 +2,31 @@
 
 command -vp dialog >/dev/null 2>&1
 
-if [[ $? == 0 ]]
+if [[ $? == 1 ]]
 then
 	dialog $@
 	exit $?
 fi
 
-
-_readkey()
+gettermsize()
 {
-	# $'\t' -> tab
-	# ''    -> enter
+	echo -en "\u1b[999;999H\u1b[6n"
+
+	while read -n 1 -s -t 1; do out="$out$REPLY"; done < /dev/tty;
+
+		echo
+
+		if [[ $out =~ $'\e'\[([0-9]*)\;([0-9]*)R ]]
+		then
+			LINES=${BASH_REMATCH[1]}
+			COLUMNS=${BASH_REMATCH[2]}
+		fi
+	}
+
+	_readkey()
+	{
+		# $'\t' -> tab
+		# ''    -> enter
 	# ' '   -> space
 	# '[A'  -> up
 	# '[B'  -> down
@@ -115,10 +129,17 @@ _yesno()
 	then
 		mbprintf " %s\n" "$backtitle"
 		mbprintf " %#*s\n" $((cols - 2)) $hl
+	else
+		echo
+		echo
 	fi
 
 	line="$ind$ul$box$ur"
-	tput cup $y
+
+	for ((i=2; i<$y; ++i))
+	do
+		echo
+	done
 
 	if [[ $title ]]
 	then
@@ -142,7 +163,10 @@ _yesno()
 
 	while true
 	do
-		tput cup $(($rows - 1)) 1
+		#tput cup $(($rows - 1)) 1
+		echo
+		echo
+		echo
 		read -s -n 1 -p "Yes, or no? (y/n) " yn
 
 		case $yn in
@@ -163,8 +187,9 @@ vl='│'
 bl='└'
 br='┘'
 
-cols=$(tput cols)
-rows=$(tput lines)
+gettermsize
+cols=$COLUMNS
+rows=$LINES
 
 while [[ $# -gt 0 ]]
 do
@@ -200,6 +225,7 @@ done
 case $1 in
 	* )
 		width=$(( $4 > 30 ? $4 : 30 ))
+		width=$(( width > cols ? cols : width ))
 		readarray -t fmt_text < <(fold -s -w $((width - 4)) - <<< $2)
 		height=$(( height >= ${#fmt_text[@]} + 2 ? height : ${#fmt_text[@]} + 2 ))
 		x=${x:-$((($cols - $width) / 2))}
